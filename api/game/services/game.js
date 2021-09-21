@@ -6,6 +6,7 @@
  */
 
 const axios = require("axios");
+const slugify = require("slugify");
 
 async function getGameInfo(slug) {
   const jsdom = require("jsdom");
@@ -22,7 +23,46 @@ async function getGameInfo(slug) {
   };
 }
 
-const body = axios;
+async function getByName(name, entityName) {
+  const item = await strapi.services[entityName].find({ name });
+
+  return item.length ? item[0] : null;
+}
+
+async function create(name, entityName) {
+  const item = await getByName(name, entityName);
+
+  return !item
+    ? await strapi.services[entityName].create({
+        name,
+        slug: slugify(name, { lower: true }),
+      })
+    : null;
+}
+
+async function createManyToManyData(products) {
+  const developers = {};
+  const publishers = {};
+  const categories = {};
+  const platforms = {};
+
+  products.forEach((product) => {
+    const { developer, publisher, genres, supportedOperatingSystems } = product;
+
+    developers[developer] = true;
+    publishers[publisher] = true;
+    genres && genres.forEach((item) => (categories[item] = true));
+    supportedOperatingSystems &&
+      supportedOperatingSystems.forEach((item) => (platforms[item] = true));
+  });
+
+  return Promise.all([
+    Object.keys(developers).map((name) => create(name, "developer")),
+    Object.keys(publishers).map((name) => create(name, "publisher")),
+    Object.keys(categories).map((name) => create(name, "category")),
+    Object.keys(platforms).map((name) => create(name, "platform")),
+  ]);
+}
 
 module.exports = {
   populate: async (params) => {
@@ -32,6 +72,7 @@ module.exports = {
       data: { products },
     } = await axios.get(gogUrl);
 
-    console.log(await getGameInfo(products[0].slug));
+    await createManyToManyData(products);
+    // console.log(await getGameInfo(products[0].slug));
   },
 };
